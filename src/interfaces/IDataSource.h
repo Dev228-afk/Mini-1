@@ -3,6 +3,14 @@
 #include <optional>
 #include <string>
 
+// Forward declarations for new record types
+struct FireRecord;
+struct WorldBankRecord;
+struct RecordView;
+using FireRecords = std::vector<FireRecord>;
+using WorldBankRecords = std::vector<WorldBankRecord>;
+using RecordViews = std::vector<RecordView>;
+
 // Real columns across both datasets
 enum class Column {
     // WorldBank
@@ -33,12 +41,13 @@ public:
     virtual ~IDataSource() = default;
 
     // Column-aware range (inclusive). min/max passed as strings; impl parses by column type.
-    virtual Records findByRange(Column col,
-                                const std::string& minVal,
-                                const std::string& maxVal) = 0;
+    virtual RecordViews findByRange(Column col,
+                                    const std::string& minVal,
+                                    const std::string& maxVal) = 0;
 
     // For aggregate/extremes on the unified numeric metric
-    virtual std::optional<Record> findMin() = 0;  // by numericValue
-    virtual std::optional<Record> findMax() = 0;  // by numericValue
-    virtual double sumByYear(int year) = 0;       // sum of numericValue for that year
+    virtual std::optional<RecordView> findMin() = 0;  // by numericValue
+    virtual std::optional<RecordView> findMax() = 0;  // by numericValue
+    virtual double sumByYear(int year) = 0;           // sum of numericValue for that year
 };
+

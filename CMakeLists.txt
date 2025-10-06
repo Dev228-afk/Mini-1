@@ -68,6 +68,7 @@ add_executable(benchmark
   src/implementations/VectorDataSource.cpp
   src/implementations/MapDataSource.cpp
   src/utility/CSVParser.cpp
+  src/utility/Records.cpp
 )
 
 if(APPLE)

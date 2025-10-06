@@ -94,7 +94,7 @@ static void run_benchmarks(const std::string& dataset, const std::string& impl, 
     // 1. Column range query (scan)
     {
         auto t0 = clk::now();
-        Records recs = ds.findByRange(col, minVal, maxVal);
+        RecordViews recs = ds.findByRange(col, minVal, maxVal);
         auto t1 = clk::now();
         double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         std::cout << dataset << "," << impl << "," << mode_str(threads)
@@ -109,7 +109,7 @@ static void run_benchmarks(const std::string& dataset, const std::string& impl, 
         auto t1 = clk::now();
         double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         // Count rows that match the year (approximate by checking a sample)
-        Records yearRecs = ds.findByRange(Column::Year, std::to_string(year), std::to_string(year));
+        RecordViews yearRecs = ds.findByRange(Column::Year, std::to_string(year), std::to_string(year));
         std::cout << dataset << "," << impl << "," << mode_str(threads)
                   << ",sumByYear,Year," << year << "," << sum << "," << yearRecs.size() << "," << ms << "\n";
     }
@@ -127,7 +127,7 @@ static void run_benchmarks(const std::string& dataset, const std::string& impl, 
         double ms2 = std::chrono::duration<double, std::milli>(t3 - t2).count();
 
         // Count total rows processed (approximate by checking a wide range)
-        Records allRecs = ds.findByRange(Column::Value, "0", "1000000");
+        RecordViews allRecs = ds.findByRange(Column::Value, "0", "1000000");
         std::cout << dataset << "," << impl << "," << mode_str(threads)
                   << ",findMin,value,," << (rmin ? rmin->numericValue : 0.0) << "," << allRecs.size() << "," << ms1 << "\n";
         std::cout << dataset << "," << impl << "," << mode_str(threads)
@@ -150,7 +150,12 @@ int main(int argc, char* argv[]) {
     cli.threads = 1;
 #endif
 
+    // Measure loading time
+    auto load_t0 = clk::now();
     auto ds = DataSourceFactory::create(cli.dsType, cli.csvPath);
+    auto load_t1 = clk::now();
+    double load_ms = std::chrono::duration<double, std::milli>(load_t1 - load_t0).count();
+    
     if (!ds) {
         std::cerr << "Error: invalid data source type " << cli.dsType << "\n";
         return 1;
@@ -166,6 +171,10 @@ int main(int argc, char* argv[]) {
     catch (const std::exception& e) {
         std::cerr << "Warning: " << e.what() << " defaulting to Population\n";
     }
+
+    std::cout << "dataset,impl,mode,stage,operation,column,arg,result,count,ms\n";
+    std::cout << dataset << "," << cli.dsType << "," << mode_str(cli.threads)
+              << ",load,load_data,,,," << "," << load_ms << "\n";
 
     run_benchmarks(dataset, cli.dsType, cli.threads, *ds, col, cli.minVal, cli.maxVal, cli.year);
     return 0;

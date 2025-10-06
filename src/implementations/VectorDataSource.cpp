@@ -22,7 +22,8 @@
 static inline bool isPopulationHeader(const std::vector<std::string>& hdr) {
     return !hdr.empty() && hdr[0] == "Country Name";
 }
-static inline bool looksLikeAirNowRow(const std::vector<std::string>& row) {
+
+static inline bool looksLikeFireRow(const std::vector<std::string>& row) {
     if (row.size() < 12) return false;
     // quick shape checks: lat, lon numeric; UTC like YYYY-MM-DD HH:MM
     auto isnum = [](const std::string& s){
@@ -34,87 +35,151 @@ static inline bool looksLikeAirNowRow(const std::vector<std::string>& row) {
     auto isdig = [](char ch){ return ch >= '0' && ch <= '9'; };
     return t.size()>=16 && isdig(t[0]) && isdig(t[1]) && isdig(t[2]) && isdig(t[3]) && t[4]=='-' && t[7]=='-' && (t[10]=='T' || t[10]==' ') && t[13]==':';
 }
+
 bool VectorDataSource::to_ll(const std::string& s, long long& out){ if(s.empty()) return false; try{ out=std::stoll(s); return true;}catch(...){return false;}}
 bool VectorDataSource::to_int(const std::string& s, int& out){ if(s.empty()) return false; try{ out=std::stoi(s); return true;}catch(...){return false;}}
 bool VectorDataSource::to_double(const std::string& s, double& out){ if(s.empty()) return false; try{ out=std::stod(s); return true;}catch(...){return false;}}
 
-// -------- construction / load (no sort, column-wise append) --------
+// -------- construction / load --------
 VectorDataSource::VectorDataSource(const std::string& filePath) {
     namespace fs = std::filesystem;
 
     auto load_single = [&](const std::string& path) {
-        // Try header first; if none, peek first row to detect AirNow
+        // Try header first; if none, peek first row to detect Fire
         CSVParser csv(path, /*hasHeader=*/true);
-        std::vector<std::string> header;
-        bool hasHdr = csv.readHeader(header);
-        if (hasHdr && isPopulationHeader(header)) {
-            dataset_ = Dataset::Population;
-            load_population(path, header);
+    std::vector<std::string> header;
+    bool hasHdr = csv.readHeader(header);
+    if (hasHdr && isPopulationHeader(header)) {
+            dataset_ = Dataset::WorldBank;
+            load_worldbank_data(path);
             return;
         }
         // No or non-pop header: check first data row
         std::vector<std::string> firstRow;
-        if (csv.next(firstRow) && looksLikeAirNowRow(firstRow)) {
-            dataset_ = Dataset::AirNow;
-            load_airnow(path);
+        if (csv.next(firstRow) && looksLikeFireRow(firstRow)) {
+            dataset_ = Dataset::Fire;
+            load_fire_data(path);
         } else {
-            // default to AirNow if headerless; otherwise assume WB
-            dataset_ = Dataset::AirNow;
-            load_airnow(path);
+            // default to Fire if headerless; otherwise assume WB
+            dataset_ = Dataset::Fire;
+            load_fire_data(path);
         }
     };
 
     std::error_code ec;
     fs::file_status st = fs::status(filePath, ec);
     if (!ec && fs::is_directory(st)) {
+        // First pass: gather all CSV files and detect dataset type
+        std::vector<std::string> csvFiles;
         bool datasetInitialized = false;
         std::vector<std::string> firstHeader;
-        Dataset firstDataset = Dataset::Population;
+        Dataset firstDataset = Dataset::WorldBank;
 
         for (auto const& entry : fs::recursive_directory_iterator(filePath, ec)) {
             if (ec) break;
             if (!entry.is_regular_file()) continue;
             const auto& p = entry.path();
             if (p.extension() != ".csv") continue;
+            
+            csvFiles.push_back(p.string());
 
             if (!datasetInitialized) {
                 CSVParser csv(p.string(), /*hasHeader=*/true);
                 bool hasHdr = csv.readHeader(firstHeader);
-                if (hasHdr && isPopulationHeader(firstHeader)) firstDataset = Dataset::Population;
+                if (hasHdr && isPopulationHeader(firstHeader)) firstDataset = Dataset::WorldBank;
                 else {
-                    // peek first row to detect AirNow vs WB
+                    // peek first row to detect Fire vs WB
                     std::vector<std::string> row;
-                    if (csv.next(row) && looksLikeAirNowRow(row)) firstDataset = Dataset::AirNow;
-                    else firstDataset = Dataset::Population;
+                    if (csv.next(row) && looksLikeFireRow(row)) firstDataset = Dataset::Fire;
+                    else firstDataset = Dataset::WorldBank;
                 }
                 dataset_ = firstDataset;
                 datasetInitialized = true;
             }
-
-            if (dataset_ == Dataset::Population) {
-                load_population(p.string(), firstHeader);
-            } else if (dataset_ == Dataset::AirNow) {
-                load_airnow(p.string());
-            } else {
-                load_airnow(p.string());
-            }
         }
 
-        size_ = objectId_.size();
+        // Second pass: parallel file loading with thread-local storage
+        if (dataset_ == Dataset::WorldBank) {
+            // Thread-local storage - no contention during processing
+            std::vector<WorldBankRecords> threadRecords(omp_get_max_threads());
+            std::vector<Dictionaries> threadDicts(omp_get_max_threads());
+            
+            #pragma omp parallel for schedule(dynamic, 1)
+            for (size_t i = 0; i < csvFiles.size(); ++i) {
+                int tid = omp_get_thread_num();
+                load_worldbank_data_thread_local(csvFiles[i], threadRecords[tid], threadDicts[tid]);
+            }
+            
+            // Merge thread-local results (minimal critical sections)
+            for (const auto& records : threadRecords) {
+                worldbank_records_.insert(worldbank_records_.end(), records.begin(), records.end());
+            }
+            merge_dictionaries(threadDicts);
+        } else if (dataset_ == Dataset::Fire) {
+            // Thread-local storage - no contention during processing
+            std::vector<FireRecords> threadRecords(omp_get_max_threads());
+            std::vector<Dictionaries> threadDicts(omp_get_max_threads());
+            
+            #pragma omp parallel for schedule(dynamic, 1)
+            for (size_t i = 0; i < csvFiles.size(); ++i) {
+                int tid = omp_get_thread_num();
+                load_fire_data_thread_local(csvFiles[i], threadRecords[tid], threadDicts[tid]);
+            }
+            
+            // Merge thread-local results (minimal critical sections)
+            for (const auto& records : threadRecords) {
+                fire_records_.insert(fire_records_.end(), records.begin(), records.end());
+            }
+            merge_dictionaries(threadDicts);
+        }
     } else {
         load_single(filePath);
     }
 }
-// ---- AirNow helpers ----
+
+// ---- Fire helpers ----
 uint32_t VectorDataSource::dict_get_or_add(std::unordered_map<std::string, uint32_t>& dict, const std::string& key) {
     auto it = dict.find(key);
     if (it != dict.end()) return it->second;
     uint32_t id = (uint32_t)dict.size();
     dict.emplace(key, id);
+    
+    // Update reverse lookup vector
+    if (&dict == &dictionaries_.parameter_dict) {
+        dictionaries_.parameter_names.push_back(key);
+    } else if (&dict == &dictionaries_.unit_dict) {
+        dictionaries_.unit_names.push_back(key);
+    } else if (&dict == &dictionaries_.site_dict) {
+        dictionaries_.site_names.push_back(key);
+    } else if (&dict == &dictionaries_.agency_dict) {
+        dictionaries_.agency_names.push_back(key);
+    } else if (&dict == &dictionaries_.aqs_dict) {
+        dictionaries_.aqs_names.push_back(key);
+    } else if (&dict == &dictionaries_.country_name_dict) {
+        dictionaries_.country_names.push_back(key);
+    } else if (&dict == &dictionaries_.country_code_dict) {
+        dictionaries_.country_codes.push_back(key);
+    }
+    
+    return id;
+}
+
+uint16_t VectorDataSource::dict_get_or_add(std::unordered_map<std::string, uint16_t>& dict, const std::string& key) {
+    auto it = dict.find(key);
+    if (it != dict.end()) return it->second;
+    uint16_t id = (uint16_t)dict.size();
+    dict.emplace(key, id);
+    
+    // Update reverse lookup vector
+    if (&dict == &dictionaries_.indicator_dict) {
+        dictionaries_.indicator_names.push_back(key);
+    }
+    
     return id;
 }
 
 static inline int to_int2(const std::string& s) { return std::atoi(s.c_str()); }
+
 long long VectorDataSource::parse_utc_minutes(const std::string& utc) {
     // expect YYYY-MM-DDTHH:MM or YYYY-MM-DD HH:MM
     if (utc.size() < 16) return 0;
@@ -134,7 +199,11 @@ long long VectorDataSource::parse_utc_minutes(const std::string& utc) {
     return minutes;
 }
 
-void VectorDataSource::load_airnow(const std::string& path) {
+void VectorDataSource::load_fire_data(const std::string& path) {
+    load_fire_data_thread_local(path, fire_records_, dictionaries_);
+}
+
+void VectorDataSource::load_fire_data_thread_local(const std::string& path, FireRecords& records, Dictionaries& dicts) {
     CSVParser csv(path, /*hasHeader=*/false);
     std::vector<std::string> row;
     while (csv.next(row)) {
@@ -147,8 +216,18 @@ void VectorDataSource::load_airnow(const std::string& path) {
         
         const std::string& utc = row[2];
         long long utc_minutes = parse_utc_minutes(utc);
-        uint32_t paramId = dict_get_or_add(dict_parameter_, row[3]);
-        uint32_t unitId  = dict_get_or_add(dict_unit_, row[5]);
+        
+        // Thread-local dictionary operations (no critical sections needed)
+        auto get_or_add_local = [&dicts](std::unordered_map<std::string, uint32_t>& dict, const std::string& key) -> uint32_t {
+            auto it = dict.find(key);
+            if (it != dict.end()) return it->second;
+            uint32_t id = (uint32_t)dict.size();
+            dict.emplace(key, id);
+            return id;
+        };
+        
+        uint32_t paramId = get_or_add_local(dicts.parameter_dict, row[3]);
+        uint32_t unitId  = get_or_add_local(dicts.unit_dict, row[5]);
         
         float value = std::numeric_limits<float>::quiet_NaN(); 
         if (!row[4].empty() && to_double(row[4], value_d) && value_d != -999.0) value = (float)value_d;
@@ -157,44 +236,31 @@ void VectorDataSource::load_airnow(const std::string& path) {
         
         int aqi = -999; if (!row[7].empty()) { int v=0; if (to_int(row[7], v)) aqi = v; }
         uint8_t cat = 0; if (!row[8].empty()) { int v=0; if (to_int(row[8], v)) cat = (uint8_t)v; }
-        uint32_t siteId   = dict_get_or_add(dict_site_, row[9]);
-        uint32_t agencyId = dict_get_or_add(dict_agency_, row[10]);
-        uint32_t aqsId    = dict_get_or_add(dict_aqs_, row[11]);
+        uint32_t siteId   = get_or_add_local(dicts.site_dict, row[9]);
+        uint32_t agencyId = get_or_add_local(dicts.agency_dict, row[10]);
+        uint32_t aqsId    = get_or_add_local(dicts.aqs_dict, row[11]);
 
-        an_latitude_.push_back(lat);
-        an_longitude_.push_back(lon);
-        an_utc_minutes_.push_back(utc_minutes);
-        an_parameter_id_.push_back((uint16_t)paramId);
-        an_unit_id_.push_back((uint16_t)unitId);
-        an_value_.push_back(value);
-        an_raw_value_.push_back(raw);
-        an_aqi_.push_back((int16_t)aqi);
-        an_category_.push_back(cat);
-        an_site_id_.push_back(siteId);
-        an_agency_id_.push_back(agencyId);
-        an_aqs_id_.push_back(aqsId);
-
-        // integrate with unified vectors for existing API
-        objectId_.push_back((long long)an_site_id_.back());
-        int yr = 0; // derive from utc
+        // Derived fields
+        int yr = 0;
         if (utc.size()>=4) { int v=0; if (to_int(utc.substr(0,4), v)) yr = v; }
-        countryName_.emplace_back();
-        countryCode_.emplace_back();
-        year_.push_back(yr);
-        population_.push_back(0.0);
-        numericValue_.push_back(std::isnan(value) ? 0.0f : value);
+        double numericVal = std::isnan(value) ? 0.0 : value;
+
+        // Direct construction in place (no copy) - no critical section needed
+        records.emplace_back(lat, lon, (int32_t)utc_minutes, (uint16_t)paramId, (uint16_t)unitId,
+                            value, raw, (int16_t)aqi, cat, siteId, agencyId, aqsId, yr, numericVal);
     }
-    size_ = objectId_.size();
 }
 
+void VectorDataSource::load_worldbank_data(const std::string& path) {
+    load_worldbank_data_thread_local(path, worldbank_records_, dictionaries_);
+}
 
-void VectorDataSource::load_population(const std::string& path, const std::vector<std::string>& header) {
+void VectorDataSource::load_worldbank_data_thread_local(const std::string& path, WorldBankRecords& records, Dictionaries& dicts) {
     CSVParser csv(path, /*hasHeader=*/true);
-    std::vector<std::string> hdr = header;
+    std::vector<std::string> header;
+    csv.readHeader(header);
 
     std::vector<std::string> row;
-    long long synthId = 1;
-
     while (csv.next(row)) {
         if (row.size() < 5) continue;
         const std::string countryName = row[0];
@@ -202,176 +268,359 @@ void VectorDataSource::load_population(const std::string& path, const std::vecto
         const std::string indicatorName = row[2];
         const std::string indicatorCode = row[3];
 
-        uint32_t cn_id = dict_get_or_add(wb_dict_country_name_, countryName);
-        uint32_t cc_id = dict_get_or_add(wb_dict_country_code_, countryCode);
+        // Thread-local dictionary operations (no critical sections needed)
+        auto get_or_add_local_32 = [&dicts](std::unordered_map<std::string, uint32_t>& dict, const std::string& key) -> uint32_t {
+            auto it = dict.find(key);
+            if (it != dict.end()) return it->second;
+            uint32_t id = (uint32_t)dict.size();
+            dict.emplace(key, id);
+            return id;
+        };
+        
+        auto get_or_add_local_16 = [&dicts](std::unordered_map<std::string, uint16_t>& dict, const std::string& key) -> uint16_t {
+            auto it = dict.find(key);
+            if (it != dict.end()) return it->second;
+            uint16_t id = (uint16_t)dict.size();
+            dict.emplace(key, id);
+            return id;
+        };
+
+        uint32_t cn_id = get_or_add_local_32(dicts.country_name_dict, countryName);
+        uint32_t cc_id = get_or_add_local_32(dicts.country_code_dict, countryCode);
+        uint16_t indicator_id = get_or_add_local_16(dicts.indicator_dict, indicatorName + "|" + indicatorCode);
 
         for (size_t c=4; c<row.size(); ++c) {
-            if (c < hdr.size() && hdr[c].size()==4 && (hdr[c][0] >= '0' && hdr[c][0] <= '9')) {
-                int yr=0; if (!VectorDataSource::to_int(hdr[c], yr)) continue;
-                double val; if (row[c].empty() || !VectorDataSource::to_double(row[c], val)) continue;
+            if (c < header.size() && header[c].size()==4 && (header[c][0] >= '0' && header[c][0] <= '9')) {
+                int yr=0; if (!to_int(header[c], yr)) continue;
+                double val; if (row[c].empty() || !to_double(row[c], val)) continue;
 
-                objectId_.push_back(synthId++);
-
-                countryName_.push_back(countryName);
-                countryCode_.push_back(countryCode);
-                year_.push_back(yr);
-                population_.push_back(val);
-                numericValue_.push_back(val); // unified metric
-
-                // store WB extra columns
-                wb_indicator_name_.push_back(indicatorName);
-                wb_indicator_code_.push_back(indicatorCode);
-                wb_country_name_id_.push_back(cn_id);
-                wb_country_code_id_.push_back(cc_id);
+                // Direct construction in place (no copy) - no critical section needed
+                records.emplace_back(cn_id, cc_id, indicator_id, (int16_t)yr, val, val);
             }
         }
     }
-    size_ = objectId_.size();
 }
 
-// -------- AoS view over SoA row i --------
-Record VectorDataSource::makeRow(size_t i) const {
-    Record r;
-    r.objectId = objectId_[i];
-    r.countryName = countryName_[i];
-    r.countryCode = countryCode_[i];
-    r.year = year_[i];
-    r.population = population_[i];
-    r.numericValue = numericValue_[i];
-    return r;
+// -------- conversion helpers --------
+RecordView VectorDataSource::fire_to_view(const FireRecord& record) const {
+    RecordView view;
+    view.type = RecordView::Type::Fire;
+    view.year = record.year;
+    view.numericValue = record.numericValue;
+    view.latitude = record.latitude;
+    view.longitude = record.longitude;
+    view.value = record.value;
+    view.aqi = record.aqi;
+    view.parameter_id = record.parameter_id;
+    view.unit_id = record.unit_id;
+    view.site_id = record.site_id;
+    view.agency_id = record.agency_id;
+    view.aqs_id = record.aqs_id;
+    return view;
 }
 
-// -------- generic scan helper (no presort/index) --------
-template <class Pred>
-Records VectorDataSource::scan_where(Pred&& p) const {
-    Records out;
-
-#ifndef _OPENMP
-    out.reserve(1024);
-    for (size_t i=0;i<size_;++i) if (p(i)) out.push_back(makeRow(i));
-#else
-    // thread-local buffers + merge
-    int T = 1;
-    #ifdef _OPENMP
-    T = omp_get_max_threads();
-    #endif
-    std::vector<Records> locals(T);
-    #pragma omp parallel
-    {
-        int tid = 0;
-        #ifdef _OPENMP
-        tid = omp_get_thread_num();
-        #endif
-        auto& buf = locals[tid];
-        buf.reserve(1024);
-        #pragma omp for schedule(static)
-        for (long i=0; i<(long)size_; ++i) if (p((size_t)i)) buf.push_back(makeRow((size_t)i));
-    }
-    size_t total=0; for (auto& v:locals) total += v.size();
-    out.reserve(total);
-    for (auto& v:locals) { out.insert(out.end(), v.begin(), v.end()); }
-#endif
-    return out;
+RecordView VectorDataSource::worldbank_to_view(const WorldBankRecord& record) const {
+    RecordView view;
+    view.type = RecordView::Type::WorldBank;
+    view.year = record.year;
+    view.numericValue = record.numericValue;
+    view.population = record.population;
+    view.country_name_id = record.country_name_id;
+    view.country_code_id = record.country_code_id;
+    return view;
 }
 
 // -------- column-aware API (all scans) --------
-Records VectorDataSource::findByRange(Column col, const std::string& loS, const std::string& hiS) {
+RecordViews VectorDataSource::findByRange(Column col, const std::string& loS, const std::string& hiS) {
+    RecordViews results;
+    
+    if (dataset_ == Dataset::Fire) {
+        // Fire-specific queries
     switch (col) {
-        // legacy column removed: AcresBurned
-        case Column::Value: {
-            double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return numericValue_[i] >= lo && numericValue_[i] <= hi; });
+            case Column::Value: {
+                double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if (record.numericValue >= lo && record.numericValue <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::Latitude: {
+                double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if (record.latitude >= lo && record.latitude <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::Longitude: {
+                double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if (record.longitude >= lo && record.longitude <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::Year: {
+                int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if (record.year >= lo && record.year <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::RawValue: {
+                double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if (!std::isnan(record.raw_value) && record.raw_value >= lo && record.raw_value <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::AQI: {
+                int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if (record.aqi >= lo && record.aqi <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::Category: {
+                int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if ((int)record.category >= lo && (int)record.category <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::UTCMinutes: {
+                long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if (record.utc_minutes >= lo && record.utc_minutes <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::ParameterId: {
+                long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if ((long long)record.parameter_id >= lo && (long long)record.parameter_id <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::UnitId: {
+                long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if ((long long)record.unit_id >= lo && (long long)record.unit_id <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::SiteId: {
+                long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if ((long long)record.site_id >= lo && (long long)record.site_id <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::AgencyId: {
+                long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if ((long long)record.agency_id >= lo && (long long)record.agency_id <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::AqsId: {
+                long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+                for (const auto& record : fire_records_) {
+                    if ((long long)record.aqs_id >= lo && (long long)record.aqs_id <= hi) {
+                        results.push_back(fire_to_view(record));
+                    }
+                }
+                break;
+            }
+            default:
+                return {}; // Unsupported column for Fire dataset
         }
-        case Column::RawValue: {
-            double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
-            // when AirNow is used, raw values exist only for those rows; otherwise zeros
-            return scan_where([&](size_t i){ return an_raw_value_.size()==size_ ? (an_raw_value_[i] >= lo && an_raw_value_[i] <= hi) : false; });
-        }
-        case Column::AQI: {
-            int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_aqi_.size()==size_ ? (an_aqi_[i] >= lo && an_aqi_[i] <= hi) : false; });
-        }
-        case Column::Category: {
-            int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_category_.size()==size_ ? ((int)an_category_[i] >= lo && (int)an_category_[i] <= hi) : false; });
-        }
-        case Column::Latitude: {
-            double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_latitude_.size()==size_ ? (an_latitude_[i] >= lo && an_latitude_[i] <= hi) : false; });
-        }
-        case Column::Longitude: {
-            double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_longitude_.size()==size_ ? (an_longitude_[i] >= lo && an_longitude_[i] <= hi) : false; });
-        }
-        case Column::UTCMinutes: {
-            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_utc_minutes_.size()==size_ ? (an_utc_minutes_[i] >= lo && an_utc_minutes_[i] <= hi) : false; });
-        }
-        case Column::ParameterId: {
-            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_parameter_id_.size()==size_ ? ((long long)an_parameter_id_[i] >= lo && (long long)an_parameter_id_[i] <= hi) : false; });
-        }
-        case Column::UnitId: {
-            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_unit_id_.size()==size_ ? ((long long)an_unit_id_[i] >= lo && (long long)an_unit_id_[i] <= hi) : false; });
-        }
-        case Column::SiteId: {
-            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_site_id_.size()==size_ ? ((long long)an_site_id_[i] >= lo && (long long)an_site_id_[i] <= hi) : false; });
-        }
-        case Column::AgencyId: {
-            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_agency_id_.size()==size_ ? ((long long)an_agency_id_[i] >= lo && (long long)an_agency_id_[i] <= hi) : false; });
-        }
-        case Column::AqsId: {
-            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return an_aqs_id_.size()==size_ ? ((long long)an_aqs_id_[i] >= lo && (long long)an_aqs_id_[i] <= hi) : false; });
-        }
-        case Column::WB_CountryNameId: {
-            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return wb_country_name_id_.size()==size_ ? ((long long)wb_country_name_id_[i] >= lo && (long long)wb_country_name_id_[i] <= hi) : false; });
-        }
-        case Column::WB_CountryCodeId: {
-            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return wb_country_code_id_.size()==size_ ? ((long long)wb_country_code_id_[i] >= lo && (long long)wb_country_code_id_[i] <= hi) : false; });
-        }
+    } else if (dataset_ == Dataset::WorldBank) {
+        // WorldBank-specific queries
+        switch (col) {
         case Column::Population: {
-            double lo=0, hi=0;
-            if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return population_[i] >= lo && population_[i] <= hi; });
+                double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
+                for (const auto& record : worldbank_records_) {
+                    if (record.population >= lo && record.population <= hi) {
+                        results.push_back(worldbank_to_view(record));
+                    }
+                }
+                break;
         }
         case Column::Year: {
-            int lo=0, hi=0;
-            if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
-            return scan_where([&](size_t i){ return year_[i] >= lo && year_[i] <= hi; });
+                int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
+                for (const auto& record : worldbank_records_) {
+                    if (record.year >= lo && record.year <= hi) {
+                        results.push_back(worldbank_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::WB_CountryNameId: {
+                long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+                for (const auto& record : worldbank_records_) {
+                    if ((long long)record.country_name_id >= lo && (long long)record.country_name_id <= hi) {
+                        results.push_back(worldbank_to_view(record));
+                    }
+                }
+                break;
+            }
+            case Column::WB_CountryCodeId: {
+                long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+                for (const auto& record : worldbank_records_) {
+                    if ((long long)record.country_code_id >= lo && (long long)record.country_code_id <= hi) {
+                        results.push_back(worldbank_to_view(record));
+                    }
+                }
+                break;
+            }
+            default:
+                return {}; // Unsupported column for WorldBank dataset
         }
-        // legacy columns removed
     }
-    return {};
+    
+    return results;
 }
 
 // -------- extremes & aggregate over unified numericValue --------
-std::optional<Record> VectorDataSource::findMin() {
-    if (size_==0) return std::nullopt;
-    size_t best=0;
-    for (size_t i=1;i<size_;++i) if (numericValue_[i] < numericValue_[best]) best = i;
-    return makeRow(best);
+std::optional<RecordView> VectorDataSource::findMin() {
+    if (dataset_ == Dataset::Fire) {
+        if (fire_records_.empty()) return std::nullopt;
+        auto it = std::min_element(fire_records_.begin(), fire_records_.end(),
+            [](const FireRecord& a, const FireRecord& b) { return a.numericValue < b.numericValue; });
+        return fire_to_view(*it);
+    } else {
+        if (worldbank_records_.empty()) return std::nullopt;
+        auto it = std::min_element(worldbank_records_.begin(), worldbank_records_.end(),
+            [](const WorldBankRecord& a, const WorldBankRecord& b) { return a.numericValue < b.numericValue; });
+        return worldbank_to_view(*it);
+    }
 }
 
-std::optional<Record> VectorDataSource::findMax() {
-    if (size_==0) return std::nullopt;
-    size_t best=0;
-    for (size_t i=1;i<size_;++i) if (numericValue_[i] > numericValue_[best]) best = i;
-    return makeRow(best);
+std::optional<RecordView> VectorDataSource::findMax() {
+    if (dataset_ == Dataset::Fire) {
+        if (fire_records_.empty()) return std::nullopt;
+        auto it = std::max_element(fire_records_.begin(), fire_records_.end(),
+            [](const FireRecord& a, const FireRecord& b) { return a.numericValue < b.numericValue; });
+        return fire_to_view(*it);
+    } else {
+        if (worldbank_records_.empty()) return std::nullopt;
+        auto it = std::max_element(worldbank_records_.begin(), worldbank_records_.end(),
+            [](const WorldBankRecord& a, const WorldBankRecord& b) { return a.numericValue < b.numericValue; });
+        return worldbank_to_view(*it);
+    }
 }
 
 double VectorDataSource::sumByYear(int year) {
     double sum = 0.0;
-#ifdef _OPENMP
-    #pragma omp parallel for reduction(+:sum) schedule(static)
-    for (long i=0;i<(long)size_;++i) if (year_[i]==year) sum += numericValue_[i];
-#else
-    for (size_t i=0;i<size_;++i) if (year_[i]==year) sum += numericValue_[i];
-#endif
+    if (dataset_ == Dataset::Fire) {
+        for (const auto& record : fire_records_) {
+            if (record.year == year) sum += record.numericValue;
+        }
+    } else {
+        for (const auto& record : worldbank_records_) {
+            if (record.year == year) sum += record.numericValue;
+        }
+    }
     return sum;
 }
+
+void VectorDataSource::merge_dictionaries(const std::vector<Dictionaries>& threadDicts) {
+    // Merge all thread-local dictionaries into the main dictionaries_
+    for (const auto& threadDict : threadDicts) {
+        // Merge parameter_dict
+        for (const auto& [key, id] : threadDict.parameter_dict) {
+            if (dictionaries_.parameter_dict.find(key) == dictionaries_.parameter_dict.end()) {
+                uint32_t newId = (uint32_t)dictionaries_.parameter_dict.size();
+                dictionaries_.parameter_dict[key] = newId;
+                dictionaries_.parameter_names.push_back(key);
+            }
+        }
+        
+        // Merge unit_dict
+        for (const auto& [key, id] : threadDict.unit_dict) {
+            if (dictionaries_.unit_dict.find(key) == dictionaries_.unit_dict.end()) {
+                uint32_t newId = (uint32_t)dictionaries_.unit_dict.size();
+                dictionaries_.unit_dict[key] = newId;
+                dictionaries_.unit_names.push_back(key);
+            }
+        }
+        
+        // Merge site_dict
+        for (const auto& [key, id] : threadDict.site_dict) {
+            if (dictionaries_.site_dict.find(key) == dictionaries_.site_dict.end()) {
+                uint32_t newId = (uint32_t)dictionaries_.site_dict.size();
+                dictionaries_.site_dict[key] = newId;
+                dictionaries_.site_names.push_back(key);
+            }
+        }
+        
+        // Merge agency_dict
+        for (const auto& [key, id] : threadDict.agency_dict) {
+            if (dictionaries_.agency_dict.find(key) == dictionaries_.agency_dict.end()) {
+                uint32_t newId = (uint32_t)dictionaries_.agency_dict.size();
+                dictionaries_.agency_dict[key] = newId;
+                dictionaries_.agency_names.push_back(key);
+            }
+        }
+        
+        // Merge aqs_dict
+        for (const auto& [key, id] : threadDict.aqs_dict) {
+            if (dictionaries_.aqs_dict.find(key) == dictionaries_.aqs_dict.end()) {
+                uint32_t newId = (uint32_t)dictionaries_.aqs_dict.size();
+                dictionaries_.aqs_dict[key] = newId;
+                dictionaries_.aqs_names.push_back(key);
+            }
+        }
+        
+        // Merge country_name_dict
+        for (const auto& [key, id] : threadDict.country_name_dict) {
+            if (dictionaries_.country_name_dict.find(key) == dictionaries_.country_name_dict.end()) {
+                uint32_t newId = (uint32_t)dictionaries_.country_name_dict.size();
+                dictionaries_.country_name_dict[key] = newId;
+                dictionaries_.country_names.push_back(key);
+            }
+        }
+        
+        // Merge country_code_dict
+        for (const auto& [key, id] : threadDict.country_code_dict) {
+            if (dictionaries_.country_code_dict.find(key) == dictionaries_.country_code_dict.end()) {
+                uint32_t newId = (uint32_t)dictionaries_.country_code_dict.size();
+                dictionaries_.country_code_dict[key] = newId;
+                dictionaries_.country_codes.push_back(key);
+            }
+        }
+        
+        // Merge indicator_dict
+        for (const auto& [key, id] : threadDict.indicator_dict) {
+            if (dictionaries_.indicator_dict.find(key) == dictionaries_.indicator_dict.end()) {
+                uint16_t newId = (uint16_t)dictionaries_.indicator_dict.size();
+                dictionaries_.indicator_dict[key] = newId;
+                dictionaries_.indicator_names.push_back(key);
+            }
+        }
+    }
+}
+
