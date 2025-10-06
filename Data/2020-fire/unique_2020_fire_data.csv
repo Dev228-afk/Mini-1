@@ -1,0 +1,101 @@
+Latitude,Longitude,UTC,Parameter,Concentration,Unit,Raw Concentration,AQI,Category,Site Name,Site Agency,AQS ID,Full AQS ID
+35.0186,-106.651901,9/10/20 21:00,NO2,1.7,PPB,1.7,1.0,1.0,South Valley,Albuquerque Environmental Health Department,350010029,8.4035E+11
+40.598056,-111.894167,9/16/20 15:00,NO2,26.9,PPB,26.9,25.0,1.0,Copper View,Utah Department of Environmental Quality,8.4049E+11,8.4049E+11
+34.2143,-79.7673,9/15/20 11:00,PM2.5,6.4,UG/M3,6.5,27.0,1.0,Williams Middle School,South Carolina DHEC,450410003,8.4045E+11
+40.515,-78.3889,9/11/20 1:00,OZONE,17.0,PPB,12.0,16.0,1.0,Altoona,Pennsylvania Dept. of Environmental Protection,420130801,8.4042E+11
+40.42735,-80.59253,9/6/20 11:00,OZONE,17.0,PPB,15.0,16.0,1.0,WEIRTON,West Virginia Division of Air Quality - Wheeling,540290009,8.4054E+11
+33.7397,-81.8536,8/23/20 9:00,PM2.5,8.4,UG/M3,10.9,35.0,1.0,Trenton,South Carolina DHEC,450370001,8.4045E+11
+32.0475,-110.7739,8/26/20 5:00,OZONE,52.0,PPB,51.0,48.0,1.0,Fairgrounds,Pima County Department of Environmental Quality,040191020,8.4004E+11
+34.40428,-118.80998,9/9/20 17:00,OZONE,33.0,PPB,31.0,31.0,1.0,Piru - Pacific,Ventura County APCD,061110009,8.40061E+11
+30.0842,-84.1617,8/26/20 21:00,OZONE,16.0,PPB,17.0,15.0,1.0,St. Marks Wildlife Refuge,Florida Dept. of Environmental Protection,121290001,8.40121E+11
+42.990263,-82.395341,8/10/20 15:00,PM2.5,17.1,UG/M3,14.0,62.0,2.0,Sarnia,Ontario Ministry of the Environment,000061009,1.24E+11
+39.146025,-84.538375,9/6/20 9:00,CO,0.4,PPM,0.4,,,Cincinnati Near Road,Ohio EPA-DAPC,390610048,8.40391E+11
+40.9958,-80.3467,9/7/20 21:00,OZONE,31.0,PPB,39.0,29.0,1.0,New Castle,Pennsylvania Dept. of Environmental Protection,420730015,8.40421E+11
+40.366452,-80.615691,9/14/20 11:00,SO2,0.0,PPB,0.0,0.0,1.0,Steubenville,Ohio EPA-DAPC,390810017,8.40391E+11
+37.179,-113.3052,9/7/20 1:00,PM2.5,5.4,UG/M3,6.0,23.0,1.0,Hurricane,Utah Department of Environmental Quality,490530007,8.40491E+11
+41.457939,-122.900062,8/10/20 17:00,PM2.5,7.2,UG/M3,,30.0,1.0,MMCA81022,California Air Resources Board,MMCA81022,840MMCA81022
+34.445301,-119.827797,9/9/20 5:00,OZONE,19.0,PPB,11.0,18.0,1.0,Goleta,Santa Barbara County Air Pollution Control District,060832011,8.40061E+11
+36.212787,-115.994802,9/20/20 3:00,PM10,52.0,UG/M3,47.0,48.0,1.0,Manse,Nevada Division of Environmental Protection,320230014,8.4032E+11
+41.529999,-90.587502,8/27/20 11:00,OZONE,19.0,PPB,10.0,18.0,1.0,"Davenport, 10th & Vine",Iowa DNR,191630015,8.40192E+11
+36.911667,-87.323608,8/30/20 13:00,OZONE,19.0,PPB,17.0,18.0,1.0,Hopkinsville,Kentucky DEP,210470006,8.4021E+11
+39.83562,-84.72049,9/7/20 1:00,CO,0.2,PPM,0.2,,,Preble NCore,Ohio EPA-DAPC,391351001,8.40391E+11
+32.5214,-84.9436,9/12/20 13:00,PM2.5,4.2,UG/M3,4.7,18.0,1.0,Columbus Airport,Georgia Department of Natural Resources,132150008,8.40132E+11
+42.93257,-87.93434,9/9/20 21:00,NO2,6.6,PPB,6.6,6.0,1.0,MILWAUKEE COLLEGE AVE.-NR,Wisconsin Dept. of Natural Resources,550790056,8.40551E+11
+37.13678,-107.62863,9/2/20 17:00,CO,0.8,PPM,0.8,,,Ute 1,Southern Ute Tribe,080677001,8.40081E+11
+41.8956,-86.0017,9/10/20 9:00,OZONE,7.0,PPB,6.0,6.0,1.0,CASSOPOLIS,"Michigan Department of Environment, Great Lakes, and Energy",260270003,8.4026E+11
+36.032955,-78.904037,8/31/20 13:00,PM10,13.0,UG/M3,17.0,12.0,1.0,Durham Armory,North Carolina DEQ - Division of Air Quality,370630015,8.40371E+11
+39.621462,-119.718738,9/4/20 5:00,PM2.5,29.3,UG/M3,32.0,87.0,2.0,Spanish Springs,Northern Nevada Public Health Air Quality Management Division,320311007,8.4032E+11
+36.78538,-119.77321,9/3/20 11:00,OZONE,24.0,PPB,24.0,22.0,1.0,Fresno - Garland,California Air Resources Board,060190011,8.4006E+11
+33.925062,-117.952586,8/23/20 15:00,NO2,2.8,PPB,2.8,2.0,1.0,La Habra,South Coast AQMD,060595001,8.40061E+11
+36.206699,-95.976402,9/8/20 13:00,OZONE,24.0,PPB,23.0,22.0,1.0,Tulsa,Oklahoma Department of Environmental Quality,401431127,8.40401E+11
+29.7639,-90.7653,8/16/20 17:00,PM2.5,14.9,UG/M3,14.8,57.0,2.0,Thibodaux,Louisiana Department of Environmental Quality,220570004,8.40221E+11
+29.5203,-95.3925,9/3/20 15:00,OZONE,16.0,PPB,14.0,15.0,1.0,Manvel Croix Park C84,Texas Commission on Environmental Quality,480391004,8.4048E+11
+29.823319,-94.983786,9/8/20 21:00,OZONE,33.0,PPB,34.0,31.0,1.0,Baytown Garth C1017,Texas Commission on Environmental Quality,482011017,8.40482E+11
+32.884761,-112.03705,8/16/20 21:00,PM10,41.0,UG/M3,39.0,38.0,1.0,Hidden Valley,Pinal County Air Quality Control District,040213015,8.4004E+11
+39.310833,-76.474444,9/6/20 21:00,SO2,0.7,PPB,0.7,0.0,1.0,Essex,Maryland Department of the Environment,240053001,8.4024E+11
+37.54377,-119.83957,8/15/20 3:00,OZONE,66.0,PPB,72.0,87.0,2.0,Jerseydale (seasonal),California Air Resources Board,060430006,8.4006E+11
+36.025981,-80.34225,8/18/20 13:00,PM2.5,8.3,UG/M3,7.7,35.0,1.0,Clemmons Middle,Forsyth County Office of Environmental Assistance and Protection,370670030,8.40371E+11
+37.4769,-97.3664,8/31/20 9:00,OZONE,23.0,PPB,17.0,21.0,1.0,PECK,Kansas Dept. of Health and Environment,201910002,8.40202E+11
+44.657014,-111.089618,9/10/20 19:00,CO,0.2,PPM,0.2,,,West Yellowstone Park Ent #2,Montana DEQ,300310017,8.403E+11
+44.61569,-123.091457,8/29/20 15:00,PM2.5,2.3,UG/M3,2.4,10.0,1.0,Albany - Calapooia School,Oregon Dept. of Environmental Quality,410430009,8.4041E+11
+39.146025,-84.538375,8/21/20 3:00,NO2,29.0,PPB,29.0,27.0,1.0,Cincinnati Near Road,Ohio EPA-DAPC,390610048,8.40391E+11
+44.373056,-110.830833,8/16/20 3:00,NO2,3.7,PPB,3.7,3.0,1.0,Yellowstone- Old Faithful Snow Lodge,National Park Service,560391013,8.4056E+11
+37.338202,-121.849892,9/2/20 1:00,PM2.5,25.9,UG/M3,24.0,80.0,2.0,San Jose - Knox Ave,San Francisco Bay Area AQMD,060850006,8.40061E+11
+29.7644,-95.0781,9/2/20 7:00,OZONE,14.0,PPB,12.0,13.0,1.0,Lynchburg Ferry C1015,Texas Commission on Environmental Quality,482011015,8.40482E+11
+36.02134,-118.13691,9/5/20 13:00,PM2.5,9.3,UG/M3,3.0,39.0,1.0,Unit1030,Forest Service,MMFS11030,840MMFS11030
+34.91263,-80.874283,9/2/20 15:00,PM2.5,11.4,UG/M3,16.0,48.0,1.0,Catawba Indian Nation,Catawba Indian Nation,TT0328801,840TT0328801
+32.7917,-115.5617,8/27/20 5:00,OZONE,38.0,PPB,39.0,35.0,1.0,El Centro - 9th Street,Imperial County Air Pollution Control District,060251003,8.4006E+11
+42.82231,-106.36501,9/8/20 11:00,NO2,1.4,PPB,1.4,1.0,1.0,Casper Gaseous,Wyoming Department of Environmental Quality,560250100,8.4056E+11
+44.087397,-103.273777,9/12/20 5:00,PM2.5,7.9,UG/M3,6.9,33.0,1.0,Credit Union,South Dakota Department of Agriculture and Natural Resources,461030020,8.40461E+11
+43.87483,-106.50974,9/14/20 5:00,OZONE,32.0,PPB,30.0,30.0,1.0,Johnson County,Wyoming Department of Environmental Quality,560190004,8.4056E+11
+33.474499,-111.805099,8/26/20 15:00,PM10,62.0,UG/M3,73.0,54.0,2.0,LEHI,Salt River Pima-Maricopa Indian Community,040137022,8.4004E+11
+31.870253,-102.334756,8/17/20 13:00,PM2.5,16.1,UG/M3,14.0,59.0,2.0,Odessa Gonzales C1014,Texas Commission on Environmental Quality,481351014,8.40481E+11
+34.25239,-119.14318,8/19/20 3:00,OZONE,27.0,PPB,24.0,25.0,1.0,El Rio - Rio Mesa School #2,Ventura County APCD,061113001,8.40061E+11
+34.906082,-95.794128,8/26/20 5:00,PM2.5,11.7,UG/M3,11.8,49.0,1.0,McAlester,Oklahoma Department of Environmental Quality,401210415,8.40401E+11
+33.5694,-112.1915,9/9/20 7:00,OZONE,28.0,PPB,28.0,26.0,1.0,Glendale Community College,Maricopa County Air Quality Department,040132001,8.4004E+11
+33.4033,-112.0731,8/23/20 21:00,OZONE,63.0,PPB,69.0,77.0,2.0,South Phoenix,Maricopa County Air Quality Department,040134003,8.4004E+11
+33.299,-111.8843,8/16/20 21:00,CO,0.2,PPM,0.2,,,West Chandler Fire Station,Maricopa County Air Quality Department,040134004,8.4004E+11
+43.989643,-124.109312,9/3/20 9:00,PM2.5,12.3,UG/M3,10.0,51.0,2.0,Florence-Department of Forestry,Lane Regional Air Protection Agency,8.4041E+11,8.4041E+11
+34.973889,-80.540833,8/18/20 9:00,OZONE,6.0,PPB,1.0,6.0,1.0,MONROEMS,North Carolina DEQ - Division of Air Quality,371790003,8.40372E+11
+33.778315,-84.391418,8/24/20 21:00,NO2,10.7,PPB,10.7,9.0,1.0,NR-Georgia Tech,Georgia Department of Natural Resources,131210056,8.40131E+11
+35.612801,-97.472198,8/18/20 3:00,OZONE,35.0,PPB,31.0,32.0,1.0,North OKC,Oklahoma Department of Environmental Quality,401091037,8.40401E+11
+43.70376,-121.5273,9/12/20 11:00,PM2.5,149.7,UG/M3,155.6,200.0,4.0,La Pine Rural Fire Dept,Oregon Dept. of Environmental Quality,8.4041E+11,8.4041E+11
+31.8794,-110.9964,9/17/20 3:00,PM10,19.0,UG/M3,22.0,18.0,1.0,Green Valley,Pima County Department of Environmental Quality,040191030,8.4004E+11
+39.4751,-91.78899,8/25/20 15:00,OZONE,29.0,PPB,31.0,27.0,1.0,Mark Twain SP,Missouri Department of Natural Resources,291370001,8.40291E+11
+39.9878,-79.2514,9/6/20 13:00,OZONE,18.0,PPB,22.0,17.0,1.0,Laurel Hill,EPA Office of Atmospheric Protection,421119991,8.40421E+11
+31.7961,-106.5839,8/26/20 7:00,OZONE,29.0,PPB,37.0,27.0,1.0,Desert View,New Mexico Air Quality Bureau,350130021,8.4035E+11
+29.863952,-94.3178,9/19/20 9:00,OZONE,30.0,PPB,34.0,28.0,1.0,Hamshire C64,Texas Commission on Environmental Quality,482450022,8.40482E+11
+34.1992,-118.5331,8/21/20 5:00,CO,0.2,PPM,0.2,,,Reseda,South Coast AQMD,060371201,8.4006E+11
+36.5672,-118.777199,9/11/20 11:00,OZONE,40.0,PPB,42.0,37.0,1.0,Sequoia and Kings Canyon NP - Lower Kaweah,National Park Service,061070006,8.40061E+11
+33.4105,-111.8651,8/31/20 15:00,CO,0.0,PPM,0.0,,,Mesa - Brooks Reservoir,Maricopa County Air Quality Department,040131003,8.4004E+11
+38.445,-76.1114,8/30/20 15:00,OZONE,33.0,PPB,37.0,31.0,1.0,Blackwater NWR,EPA Office of Atmospheric Protection,240199991,8.4024E+11
+33.4579,-112.046,8/18/20 17:00,NO2,5.0,PPB,5.0,5.0,1.0,Central Phoenix,Maricopa County Air Quality Department,040133002,8.4004E+11
+42.312158,-83.091943,8/14/20 3:00,SO2,7.9,PPB,7.9,10.0,1.0,DP4TH,"Michigan Department of Environment, Great Lakes, and Energy",261630098,8.40262E+11
+41.377685,-83.611104,9/7/20 23:00,OZONE,17.0,PPB,16.0,16.0,1.0,Bowling Green,Ohio EPA-DAPC,391730003,8.40392E+11
+42.335,-89.0381,8/16/20 23:00,OZONE,35.0,PPB,36.0,32.0,1.0,ROCK_LP,Illinois EPA,172012001,8.40172E+11
+40.3414,-111.7136,8/21/20 9:00,PM2.5,32.2,UG/M3,35.2,93.0,2.0,Lindon,Utah Department of Environmental Quality,490494001,8.4049E+11
+38.8577,-77.05922,8/19/20 15:00,NO2,5.1,PPB,5.1,5.0,1.0,AURORA HILLS,Virginia Dept. of Environmental Quality,510130020,8.4051E+11
+31.768056,-106.501111,8/26/20 1:00,PM10,19.0,UG/M3,19.0,18.0,1.0,El Paso UTEP C12,Texas Commission on Environmental Quality,481410037,8.40481E+11
+38.065,-84.5,8/31/20 17:00,PM2.5,4.8,UG/M3,5.5,20.0,1.0,NEWTWN,Kentucky DEP,210670012,8.40211E+11
+36.5819,-82.4858,9/12/20 9:00,OZONE,5.0,PPB,5.0,5.0,1.0,KSPORT,Tennessee Air Pollution Control Div.,471632003,8.40472E+11
+34.894054,-117.024756,9/12/20 7:00,PM10,83.0,UG/M3,98.0,65.0,2.0,Barstow,Mojave Desert AQMD,060710001,8.40061E+11
+35.912487,-82.062082,8/29/20 17:00,PM2.5,3.5,UG/M3,4.0,15.0,1.0,Spruce Pine,North Carolina DEQ - Division of Air Quality,371210004,8.40371E+11
+40.366452,-80.615691,9/19/20 13:00,PM2.5,0.6,UG/M3,0.1,3.0,1.0,Steubenville,Ohio EPA-DAPC,390810017,8.40391E+11
+36.694261,-121.623271,9/10/20 13:00,PM2.5,28.8,UG/M3,27.0,86.0,2.0,Salinas AMS,Monterey Bay Unified APCD,060531003,8.40061E+11
+35.63346,-83.94158,9/9/20 15:00,OZONE,36.0,PPB,32.0,33.0,1.0,Look Rock - GSMNP,National Park Service,470090101,8.4047E+11
+32.6767,-96.8717,9/10/20 11:00,OZONE,8.0,PPB,4.0,7.0,1.0,Dallas Redbird Airport C402,Texas Commission on Environmental Quality,481130087,8.40481E+11
+41.7547,-87.7136,9/6/20 7:00,PM2.5,15.1,UG/M3,13.8,57.0,2.0,CHI_COM,Illinois EPA,170310076,8.4017E+11
+36.697189,-97.081278,8/22/20 13:00,PM2.5,13.7,UG/M3,13.9,54.0,2.0,Ponca City,Oklahoma Department of Environmental Quality,400710604,8.40401E+11
+34.835603,-92.260456,8/19/20 3:00,OZONE,32.0,PPB,32.0,30.0,1.0,NLRAP,Arkansas Department of Environmental Quality,051191002,8.40051E+11
+35.206111,-111.652778,8/26/20 23:00,OZONE,55.0,PPB,57.0,51.0,2.0,Flagstaff Middle School,Arizona Department of Environmental Quality,040051008,8.4004E+11
+35.50349,-119.27264,9/8/20 13:00,NO2,17.8,PPB,17.8,16.0,1.0,Shafter - Walker Street,California Air Resources Board,060296001,8.4006E+11
+44.3106,-84.891899,8/21/20 19:00,OZONE,42.0,PPB,44.0,39.0,1.0,HOUGHTON LAKE,"Michigan Department of Environment, Great Lakes, and Energy",261130001,8.40261E+11
+41.18222,-104.778336,9/12/20 5:00,CO,0.1,PPM,0.1,,,Cheyenne NCore,Wyoming Department of Environmental Quality,560210100,8.4056E+11
+36.5408,-82.4258,8/17/20 5:00,OZONE,11.0,PPB,7.0,10.0,1.0,BVILLE,Tennessee Air Pollution Control Div.,471632002,8.40472E+11
+35.408138,-94.524414,8/24/20 15:00,PM2.5,12.8,UG/M3,17.0,52.0,2.0,ROLAND,Cherokee Nation,401359021,8.40401E+11
+32.0683,-81.0489,9/14/20 3:00,SO2,1.1,PPB,1.1,1.0,1.0,Savannah East President,Georgia Department of Natural Resources,130510021,8.40131E+11
+41.322472,-95.937992,8/21/20 15:00,SO2,0.5,PPB,0.5,0.0,1.0,16th and Whitmore,Douglas County Health Department (Omaha),310550053,8.40311E+11
+36.163962,-115.11393,8/29/20 11:00,PM2.5,12.5,UG/M3,13.3,52.0,2.0,Sunrise Acres,Clark County Department of Environment and Sustainability ,320030561,8.4032E+11
+37.8148,-122.282402,8/23/20 5:00,SO2,0.0,PPB,0.0,0.0,1.0,Oakland West,San Francisco Bay Area AQMD,060010011,8.4006E+11
+40.2464,-77.1867,8/16/20 19:00,PM2.5,7.3,UG/M3,7.0,30.0,1.0,Carlisle,Pennsylvania Dept. of Environmental Protection,420410101,8.4042E+11
+39.0242,-95.7114,8/28/20 19:00,PM10,22.0,UG/M3,20.0,20.0,1.0,KNI-Topeka,Kansas Dept. of Health and Environment,201770013,8.40202E+11
