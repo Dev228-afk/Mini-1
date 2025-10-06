@@ -5,19 +5,27 @@
 
 // Real columns across both datasets
 enum class Column {
-    // Numeric
-    AcresBurned,        // Fire: GIS_ACRES
-    Population,         // WB: population value
-    Year,               // Fire: FIRE_YEAR | WB: year
-    ObjectId,           // Fire: OBJECTID | WB: synthetic id
+    // WorldBank
+    Population,
+    Year,
 
-    // String (lexicographic)
-    FireName,           // FIRE_NAME
-    County,             // COUNTY
-    Cause,              // CAUSE
-    CountryName,        // Country Name
-    CountryCode,        // Country Code
-    ContDate            // CONT_DATE
+    // AirNow explicit columns
+    Value,
+    RawValue,
+    AQI,
+    Category,
+    Latitude,
+    Longitude,
+    UTCMinutes,
+    ParameterId,
+    UnitId,
+    SiteId,
+    AgencyId,
+    AqsId,
+
+    // WorldBank country identifiers (dictionary ids)
+    WB_CountryNameId,
+    WB_CountryCodeId
 };
 
 class IDataSource {

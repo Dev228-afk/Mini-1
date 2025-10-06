@@ -2,10 +2,16 @@
 #include "../utility/CSVParser.h"
 
 #include <cctype>
+#include <cstdlib>
+#include <ctime>
+#include <cmath>
+#include <limits>
 #include <list>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
+#include <filesystem>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -14,30 +20,75 @@
 static inline bool isPopulationHeader(const std::vector<std::string>& hdr) {
     return !hdr.empty() && hdr[0] == "Country Name";
 }
+static inline bool looksLikeAirNowRow(const std::vector<std::string>& row) {
+    if (row.size() < 12) return false;
+    // quick shape checks: lat, lon numeric; UTC like YYYY-MM-DD HH:MM
+    auto isnum = [](const std::string& s){
+        if (s.empty()) return false;
+        char* end=nullptr; std::strtod(s.c_str(), &end); return end && *end=='\0';
+    };
+    if (!isnum(row[0]) || !isnum(row[1])) return false;
+    const std::string& t = row[2];
+    auto isdig = [](char ch){ return ch >= '0' && ch <= '9'; };
+    return t.size()>=16 && isdig(t[0]) && isdig(t[1]) && isdig(t[2]) && isdig(t[3]) && t[4]=='-' && t[7]=='-' && (t[10]=='T' || t[10]==' ') && t[13]==':';
+}
+static inline int to_int2(const std::string& s) { return std::atoi(s.c_str()); }
+long long parse_utc_minutes(const std::string& utc) {
+    // expect YYYY-MM-DDTHH:MM or YYYY-MM-DD HH:MM
+    if (utc.size() < 16) return 0;
+    int year = to_int2(utc.substr(0,4));
+    int mon  = to_int2(utc.substr(5,2));
+    int day  = to_int2(utc.substr(8,2));
+    int hh   = to_int2(utc.substr(11,2));
+    int mm   = to_int2(utc.substr(14,2));
+    std::tm tm{}; tm.tm_year = year - 1900; tm.tm_mon = mon-1; tm.tm_mday = day; tm.tm_hour = hh; tm.tm_min = mm; tm.tm_sec = 0;
+    // timegm: convert UTC tm to time_t; fallback using _mkgmtime on Windows not needed here
+    #ifdef _WIN32
+    time_t t = _mkgmtime(&tm);
+    #else
+    time_t t = timegm(&tm);
+    #endif
+    long long minutes = (long long)t / 60;
+    return minutes;
+}
 bool MapDataSource::to_ll(const std::string& s, long long& out){ if(s.empty()) return false; try{ out=std::stoll(s); return true;}catch(...){return false;}}
 bool MapDataSource::to_int(const std::string& s, int& out){ if(s.empty()) return false; try{ out=std::stoi(s); return true;}catch(...){return false;}}
 bool MapDataSource::to_double(const std::string& s, double& out){ if(s.empty()) return false; try{ out=std::stod(s); return true;}catch(...){return false;}}
 
 MapDataSource::MapDataSource(const std::string& filePath) {
-    CSVParser csv(filePath, /*hasHeader=*/true);
-    std::vector<std::string> header;
-    bool hasHdr = csv.readHeader(header);
+    namespace fs = std::filesystem;
 
-    std::vector<std::string> row;
-    long long synthId = 1;
-
-    if (hasHdr && isPopulationHeader(header)) {
-        dataset_ = Dataset::Population;
+    auto load_population_file = [&](const std::string& path, const std::vector<std::string>& header){
+        CSVParser csv(path, /*hasHeader=*/true);
+        std::vector<std::string> row;
+        static long long synthId = 1;
+        
+        // Dictionary encoding for WorldBank data
+        static std::unordered_map<std::string, uint32_t> wb_dict_country_name;
+        static std::unordered_map<std::string, uint32_t> wb_dict_country_code;
+        
+        auto dict_get_or_add = [](std::unordered_map<std::string, uint32_t>& dict, const std::string& key) {
+            auto it = dict.find(key);
+            if (it != dict.end()) return it->second;
+            uint32_t id = (uint32_t)dict.size();
+            dict.emplace(key, id);
+            return id;
+        };
+        
         while (csv.next(row)) {
             if (row.size() < 5) continue;
             const std::string countryName = row[0];
             const std::string countryCode = row[1];
-
+            const std::string indicatorName = row[2];
+            const std::string indicatorCode = row[3];
+            
+            uint32_t cn_id = dict_get_or_add(wb_dict_country_name, countryName);
+            uint32_t cc_id = dict_get_or_add(wb_dict_country_code, countryCode);
+            
             for (size_t c=4; c<row.size(); ++c) {
-                if (c < header.size() && header[c].size()==4 && std::isdigit(header[c][0])) {
+                if (c < header.size() && header[c].size()==4 && ::isdigit(static_cast<unsigned char>(header[c][0]))) {
                     int yr=0; if (!to_int(header[c], yr)) continue;
                     double val; if (row[c].empty() || !to_double(row[c], val)) continue;
-
                     Record r;
                     r.objectId = synthId++;
                     r.countryName = countryName;
@@ -45,49 +96,120 @@ MapDataSource::MapDataSource(const std::string& filePath) {
                     r.year = yr;
                     r.population = val;
                     r.numericValue = val;
+                    
+                    // WorldBank-specific fields
+                    r.wb_indicator_name = indicatorName;
+                    r.wb_indicator_code = indicatorCode;
+                    r.wb_country_name_id = cn_id;
+                    r.wb_country_code_id = cc_id;
+                    
                     rows_.push_back(std::move(r));
                 }
             }
         }
-    } else {
-        dataset_ = Dataset::Fire;
+    };
 
-        // Map header names if present
-        int iOBJECTID=-1, iFIRE_NAME=-1, iGIS_ACRES=-1, iFIRE_YEAR=-1, iCOUNTY=-1, iCAUSE=-1, iCONT_DATE=-1;
-        if (hasHdr) {
-            auto find = [&](const std::string& name)->int{
-                for (int i=0;i<(int)header.size();++i) if (header[i]==name) return i;
-                return -1;
-            };
-            iOBJECTID = find("OBJECTID");
-            iFIRE_NAME = find("FIRE_NAME");
-            iGIS_ACRES = find("GIS_ACRES");
-            iFIRE_YEAR = find("FIRE_YEAR");
-            iCOUNTY = find("COUNTY");
-            iCAUSE = find("CAUSE");
-            iCONT_DATE = find("CONT_DATE");
-        }
-
+    auto load_airnow_file = [&](const std::string& path){
+        CSVParser csv(path, /*hasHeader=*/false);
+        std::vector<std::string> row;
+        static long long synthId = 1;
         while (csv.next(row)) {
-            Record r;
-            if (iOBJECTID>=0 && iOBJECTID < (int)row.size()) to_ll(row[iOBJECTID], r.objectId);
-            else if (row.size()>0) to_ll(row[0], r.objectId);
-            if (iFIRE_NAME>=0 && iFIRE_NAME < (int)row.size()) r.fireName = row[iFIRE_NAME];
-            else if (row.size()>1) r.fireName = row[1];
-            if (iGIS_ACRES>=0 && iGIS_ACRES < (int)row.size()) to_double(row[iGIS_ACRES], r.acresBurned);
-            else if (row.size()>2) to_double(row[2], r.acresBurned);
-            if (iFIRE_YEAR>=0 && iFIRE_YEAR < (int)row.size()) to_int(row[iFIRE_YEAR], r.fireYear);
-            else if (row.size()>3) to_int(row[3], r.fireYear);
-            if (iCOUNTY>=0 && iCOUNTY < (int)row.size()) r.county = row[iCOUNTY];
-            else if (row.size()>4) r.county = row[4];
-            if (iCAUSE>=0 && iCAUSE < (int)row.size())  r.cause  = row[iCAUSE];
-            else if (row.size()>5) r.cause  = row[5];
-            if (iCONT_DATE>=0 && iCONT_DATE < (int)row.size()) r.contDate = row[iCONT_DATE];
-            else if (row.size()>6) r.contDate = row[6];
+            if (row.size() < 12) continue;
 
-            r.year = r.fireYear;
-            r.numericValue = r.acresBurned;
+            double lat_d, lon_d, value_d, raw_d;
+            if (!to_double(row[0], lat_d)) continue;
+            if (!to_double(row[1], lon_d)) continue;
+            float lat = (float)lat_d, lon = (float)lon_d;
+            
+            const std::string& utc = row[2];
+            long long utc_minutes = parse_utc_minutes(utc);
+            
+            float value = std::numeric_limits<float>::quiet_NaN(); 
+            if (!row[4].empty() && to_double(row[4], value_d) && value_d != -999.0) value = (float)value_d;
+            float raw = std::numeric_limits<float>::quiet_NaN(); 
+            if (!row[6].empty() && to_double(row[6], raw_d) && raw_d != -999.0) raw = (float)raw_d;
+            
+            int aqi = -999; if (!row[7].empty()) { int v=0; if (to_int(row[7], v)) aqi = v; }
+            uint8_t cat = 0; if (!row[8].empty()) { int v=0; if (to_int(row[8], v)) cat = (uint8_t)v; }
+
+            Record r;
+            r.objectId = synthId++;
+            r.countryName = "";
+            r.countryCode = "";
+            int yr = 0; // derive from utc
+            if (utc.size()>=4) { int v=0; if (to_int(utc.substr(0,4), v)) yr = v; }
+            r.year = yr;
+            r.population = 0.0;
+            r.numericValue = std::isnan(value) ? 0.0f : value;
+
+            // AirNow-specific fields
+            r.latitude = lat;
+            r.longitude = lon;
+            r.utc_minutes = utc_minutes;
+            r.parameter_id = 0; // simplified for MapDataSource
+            r.unit_id = 0;
+            r.value = value;
+            r.raw_value = raw;
+            r.aqi = aqi;
+            r.category = cat;
+            r.site_id = 0;
+            r.agency_id = 0;
+            r.aqs_id = 0;
+
             rows_.push_back(std::move(r));
+        }
+    };
+
+    std::error_code ec;
+    auto st = fs::status(filePath, ec);
+    if (!ec && fs::is_directory(st)) {
+        bool datasetInitialized = false;
+        std::vector<std::string> firstHeader;
+        Dataset firstDataset = Dataset::Population;
+
+        for (auto const& entry : fs::recursive_directory_iterator(filePath, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+            const auto& p = entry.path();
+            if (p.extension() != ".csv") continue;
+
+            if (!datasetInitialized) {
+                CSVParser csv(p.string(), /*hasHeader=*/true);
+                bool hasHdr = csv.readHeader(firstHeader);
+                if (hasHdr && isPopulationHeader(firstHeader)) firstDataset = Dataset::Population;
+                else {
+                    // peek first row to detect AirNow vs WB
+                    std::vector<std::string> row;
+                    if (csv.next(row) && looksLikeAirNowRow(row)) firstDataset = Dataset::AirNow;
+                    else firstDataset = Dataset::Population;
+                }
+                dataset_ = firstDataset;
+                datasetInitialized = true;
+            }
+
+            if (dataset_ == Dataset::Population) {
+                load_population_file(p.string(), firstHeader);
+            } else if (dataset_ == Dataset::AirNow) {
+                load_airnow_file(p.string());
+            }
+        }
+    } else {
+        CSVParser csv(filePath, /*hasHeader=*/true);
+        std::vector<std::string> header;
+        bool hasHdr = csv.readHeader(header);
+        if (hasHdr && isPopulationHeader(header)) {
+            dataset_ = Dataset::Population;
+            load_population_file(filePath, header);
+        } else {
+            // Check first row to detect AirNow
+            std::vector<std::string> row;
+            if (csv.next(row) && looksLikeAirNowRow(row)) {
+                dataset_ = Dataset::AirNow;
+                load_airnow_file(filePath);
+            } else {
+                dataset_ = Dataset::Population;
+                load_population_file(filePath, header);
+            }
         }
     }
 }
@@ -139,9 +261,33 @@ static Records scan_list(const std::list<Record>& rows, Pred&& p) {
 // ---- column-aware API (all scans) ----
 Records MapDataSource::findByRange(Column col, const std::string& loS, const std::string& hiS) {
     switch (col) {
-        case Column::AcresBurned: {
+        case Column::Value: {
             double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
-            return scan_list(rows_, [&](const Record& r){ return r.acresBurned >= lo && r.acresBurned <= hi; });
+            return scan_list(rows_, [&](const Record& r){ return r.numericValue >= lo && r.numericValue <= hi; });
+        }
+        case Column::RawValue: {
+            double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
+            return scan_list(rows_, [&](const Record& r){ return !std::isnan(r.raw_value) && r.raw_value >= lo && r.raw_value <= hi; });
+        }
+        case Column::AQI: {
+            int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
+            return scan_list(rows_, [&](const Record& r){ return r.aqi >= lo && r.aqi <= hi; });
+        }
+        case Column::Category: {
+            int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
+            return scan_list(rows_, [&](const Record& r){ return (int)r.category >= lo && (int)r.category <= hi; });
+        }
+        case Column::Latitude: {
+            double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
+            return scan_list(rows_, [&](const Record& r){ return r.latitude >= lo && r.latitude <= hi; });
+        }
+        case Column::Longitude: {
+            double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
+            return scan_list(rows_, [&](const Record& r){ return r.longitude >= lo && r.longitude <= hi; });
+        }
+        case Column::UTCMinutes: {
+            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+            return scan_list(rows_, [&](const Record& r){ return r.utc_minutes >= lo && r.utc_minutes <= hi; });
         }
         case Column::Population: {
             double lo=0, hi=0; if(!to_double(loS,lo)||!to_double(hiS,hi)||lo>hi) return {};
@@ -151,34 +297,21 @@ Records MapDataSource::findByRange(Column col, const std::string& loS, const std
             int lo=0, hi=0; if(!to_int(loS,lo)||!to_int(hiS,hi)||lo>hi) return {};
             return scan_list(rows_, [&](const Record& r){ return r.year >= lo && r.year <= hi; });
         }
-        case Column::ObjectId: {
+        case Column::WB_CountryNameId: {
             long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
-            return scan_list(rows_, [&](const Record& r){ return r.objectId >= lo && r.objectId <= hi; });
+            return scan_list(rows_, [&](const Record& r){ return (long long)r.wb_country_name_id >= lo && (long long)r.wb_country_name_id <= hi; });
         }
-        case Column::FireName: {
-            const std::string lo = loS, hi = hiS;
-            return scan_list(rows_, [&](const Record& r){ return r.fireName >= lo && r.fireName <= hi; });
+        case Column::WB_CountryCodeId: {
+            long long lo=0, hi=0; if(!to_ll(loS,lo)||!to_ll(hiS,hi)||lo>hi) return {};
+            return scan_list(rows_, [&](const Record& r){ return (long long)r.wb_country_code_id >= lo && (long long)r.wb_country_code_id <= hi; });
         }
-        case Column::County: {
-            const std::string lo = loS, hi = hiS;
-            return scan_list(rows_, [&](const Record& r){ return r.county >= lo && r.county <= hi; });
-        }
-        case Column::Cause: {
-            const std::string lo = loS, hi = hiS;
-            return scan_list(rows_, [&](const Record& r){ return r.cause >= lo && r.cause <= hi; });
-        }
-        case Column::CountryName: {
-            const std::string lo = loS, hi = hiS;
-            return scan_list(rows_, [&](const Record& r){ return r.countryName >= lo && r.countryName <= hi; });
-        }
-        case Column::CountryCode: {
-            const std::string lo = loS, hi = hiS;
-            return scan_list(rows_, [&](const Record& r){ return r.countryCode >= lo && r.countryCode <= hi; });
-        }
-        case Column::ContDate: {
-            const std::string lo = loS, hi = hiS;
-            return scan_list(rows_, [&](const Record& r){ return r.contDate >= lo && r.contDate <= hi; });
-        }
+        // AirNow dictionary IDs not implemented in MapDataSource for simplicity
+        case Column::ParameterId:
+        case Column::UnitId:
+        case Column::SiteId:
+        case Column::AgencyId:
+        case Column::AqsId:
+            return {}; // Not implemented in MapDataSource
     }
     return {};
 }

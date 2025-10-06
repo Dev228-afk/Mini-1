@@ -16,8 +16,8 @@ public:
     double sumByYear(int year) override;
 
 private:
-    enum class Dataset { Fire, Population };
-    Dataset dataset_{Dataset::Fire};
+    enum class Dataset { Population, AirNow };
+    Dataset dataset_{Dataset::Population};
 
     // Node-based AoS to emphasize pointer-chasing (no ordering/indexing).
     std::list<Record> rows_;

@@ -27,11 +27,13 @@ struct Cli {
 
 static void usage(const char* prog) {
     std::cerr << "Usage: " << prog
-              << " <csv> <vector|map> [--col COLUMN] [--min X] [--max Y] [--year N] [--threads N]\n"
-              << "Columns: AcresBurned, Population, Year, ObjectId, FireName, County, Cause, CountryName, CountryCode, ContDate\n"
+              << " <csv_or_dir> <vector|map> [--col COLUMN] [--min X] [--max Y] [--year N] [--threads N]\n"
+              << "Columns:\n"
+              << "  WorldBank: Population, Year\n"
+              << "  AirNow:   Value, RawValue, AQI, Category, Latitude, Longitude, UTCMinutes, ParameterId, UnitId, SiteId, AgencyId, AqsId\n"
               << "Example:\n"
-              << "  " << prog << " data/unique_2020_fire_data.csv vector --col AcresBurned --min 1000 --max 50000 --year 2020 --threads 4\n"
-              << "  " << prog << " data/worldbank.csv map --col Population --min 1e7 --max 1e8 --year 2019 --threads 8\n";
+              << "  " << prog << " Data/2020-fire/data vector --col Value --min 0 --max 100 --threads 8\n"
+              << "  " << prog << " Data/worldbank/worldbank.csv vector --col Population --min 1e7 --max 1e8 --year 2019 --threads 4\n";
 }
 
 static bool parse_cli(int argc, char* argv[], Cli& cli) {
@@ -56,16 +58,23 @@ static bool parse_cli(int argc, char* argv[], Cli& cli) {
 
 static Column parseColumn(const std::string& name) {
     static const std::unordered_map<std::string, Column> map = {
-        {"AcresBurned", Column::AcresBurned},
         {"Population",  Column::Population},
         {"Year",        Column::Year},
-        {"ObjectId",    Column::ObjectId},
-        {"FireName",    Column::FireName},
-        {"County",      Column::County},
-        {"Cause",       Column::Cause},
-        {"CountryName", Column::CountryName},
-        {"CountryCode", Column::CountryCode},
-        {"ContDate",    Column::ContDate}
+        // AirNow explicit columns
+        {"Value",       Column::Value},
+        {"RawValue",    Column::RawValue},
+        {"AQI",         Column::AQI},
+        {"Category",    Column::Category},
+        {"Latitude",    Column::Latitude},
+        {"Longitude",   Column::Longitude},
+        {"UTCMinutes",  Column::UTCMinutes},
+        {"ParameterId", Column::ParameterId},
+        {"UnitId",      Column::UnitId},
+        {"SiteId",      Column::SiteId},
+        {"AgencyId",    Column::AgencyId},
+        {"AqsId",       Column::AqsId},
+        {"WB_CountryNameId", Column::WB_CountryNameId},
+        {"WB_CountryCodeId", Column::WB_CountryCodeId}
     };
     auto it = map.find(name);
     if (it == map.end()) throw std::runtime_error("Unknown column: " + name);
@@ -90,7 +99,7 @@ static void run_benchmarks(const std::string& dataset, const std::string& impl, 
         double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         std::cout << dataset << "," << impl << "," << mode_str(threads)
                   << ",findByRange," << (int)col << ",[" << minVal << ";" << maxVal << "],"
-                  << recs.size() << "," << ms << "\n";
+                  << recs.size() << "," << recs.size() << "," << ms << "\n";
     }
 
     // 2. sumByYear
@@ -99,8 +108,10 @@ static void run_benchmarks(const std::string& dataset, const std::string& impl, 
         double sum = ds.sumByYear(year);
         auto t1 = clk::now();
         double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        // Count rows that match the year (approximate by checking a sample)
+        Records yearRecs = ds.findByRange(Column::Year, std::to_string(year), std::to_string(year));
         std::cout << dataset << "," << impl << "," << mode_str(threads)
-                  << ",sumByYear,Year," << year << "," << sum << "," << ms << "\n";
+                  << ",sumByYear,Year," << year << "," << sum << "," << yearRecs.size() << "," << ms << "\n";
     }
 
     // 3. findMin & findMax on numericValue
@@ -115,10 +126,12 @@ static void run_benchmarks(const std::string& dataset, const std::string& impl, 
         auto t3 = clk::now();
         double ms2 = std::chrono::duration<double, std::milli>(t3 - t2).count();
 
+        // Count total rows processed (approximate by checking a wide range)
+        Records allRecs = ds.findByRange(Column::Value, "0", "1000000");
         std::cout << dataset << "," << impl << "," << mode_str(threads)
-                  << ",findMin,value,," << (rmin ? rmin->numericValue : 0.0) << "," << ms1 << "\n";
+                  << ",findMin,value,," << (rmin ? rmin->numericValue : 0.0) << "," << allRecs.size() << "," << ms1 << "\n";
         std::cout << dataset << "," << impl << "," << mode_str(threads)
-                  << ",findMax,value,," << (rmax ? rmax->numericValue : 0.0) << "," << ms2 << "\n";
+                  << ",findMax,value,," << (rmax ? rmax->numericValue : 0.0) << "," << allRecs.size() << "," << ms2 << "\n";
     }
 }
 

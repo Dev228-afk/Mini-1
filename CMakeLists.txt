@@ -70,6 +70,10 @@ add_executable(benchmark
   src/utility/CSVParser.cpp
 )
 
+if(APPLE)
+  target_link_libraries(benchmark PRIVATE c)
+endif()
+
 target_include_directories(benchmark PRIVATE
   src
   src/interfaces
