@@ -13,6 +13,5 @@ __pycache__/
 # macOS metadata
 .DS_Store
 
-# Large datasets (handled outside of Git)
-Data/2020-fire/merged.csv
+# Local-only duplicate dataset copy
 Data/2020-fire/data/merged.csv
